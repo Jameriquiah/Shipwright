@@ -8,6 +8,7 @@
 #include <libultraship/libultraship.h>
 #include <soh/GameVersions.h>
 #include "resource/type/SohResourceType.h"
+#include "Enhancements/CustomTunicDLs.h"
 #include "resource/type/Array.h"
 #include "resource/type/Skeleton.h"
 #include "resource/type/PlayerAnimation.h"
@@ -297,12 +298,13 @@ extern "C" void ResourceMgr_PushCurrentDirectory(char* path) {
 }
 
 extern "C" Gfx* ResourceMgr_LoadGfxByName(const char* path) {
+    const char* remappedPath = CustomTunicDLs_RemapPath(path);
     // When an alt resource exists for the DL, we need to unload the original asset
     // to clear the cache so the alt asset will be loaded instead
     // OTRTODO: If Alt loading over original cache is fixed, this line can most likely be removed
-    ResourceMgr_UnloadOriginalWhenAltExists(path);
+    ResourceMgr_UnloadOriginalWhenAltExists(remappedPath);
 
-    auto res = std::static_pointer_cast<Fast::DisplayList>(ResourceMgr_GetResourceByNameHandlingMQ(path));
+    auto res = std::static_pointer_cast<Fast::DisplayList>(ResourceMgr_GetResourceByNameHandlingMQ(remappedPath));
     return (Gfx*)&res->Instructions[0];
 }
 
