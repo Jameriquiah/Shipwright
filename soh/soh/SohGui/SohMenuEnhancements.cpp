@@ -554,6 +554,20 @@ void SohMenu::AddMenuEnhancements() {
         .Options(CheckboxOptions().Tooltip("Disables 2D pre-rendered backgrounds. Enable this when using a mod that "
                                            "implements 3D backdrops for these areas.\n"
                                            "Requires Scene Change to alter."));
+    AddWidget(path, "Use Normal Camera in Pre-Rendered Scenes", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DisableFixedCamera"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            bool enabled = CVarGetInteger(CVAR_ENHANCEMENT("3DSceneRender"), 0) != 0;
+            info.options->disabled = !enabled;
+            info.options->disabledTooltip = "Requires Disable 2D Pre-Rendered Scenes.";
+            if (!enabled && CVarGetInteger(CVAR_ENHANCEMENT("DisableFixedCamera"), 0)) {
+                CVarSetInteger(CVAR_ENHANCEMENT("DisableFixedCamera"), 0);
+            }
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "Forces fixed-camera pre-rendered scenes to use the normal third-person camera.\n"
+            "Requires Scene Change to alter."));
     AddWidget(path, "Ingame Text Spacing: %d", WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_ENHANCEMENT("TextSpacing"))
         .RaceDisable(false)
