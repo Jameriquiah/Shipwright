@@ -105,13 +105,26 @@ static void RefreshCustomEquipment() {
 
 void PatchOrUnpatch(const char* resource, const char* gfx, const char* dlist1, const char* dlist2, const char* dlist3,
                     const char* alternateDL) {
-    if (resource == NULL || gfx == NULL || dlist1 == NULL || dlist2 == NULL) {
+    if (resource == NULL || dlist1 == NULL || dlist2 == NULL) {
         return;
     }
 
     const bool altAssetsRuntime = ResourceMgr_IsAltAssetsEnabled();
 
     if (!altAssetsRuntime) {
+        ResourceMgr_UnpatchGfxByName(resource, dlist1);
+        ResourceMgr_UnpatchGfxByName(resource, dlist2);
+        if (dlist3 != NULL) {
+            ResourceMgr_UnpatchGfxByName(resource, dlist3);
+        }
+        return;
+    }
+
+    if (gfx == NULL) {
+        return;
+    }
+
+    if (!ResourceMgr_FileExists(gfx) && !ResourceMgr_FileAltExists(gfx)) {
         return;
     }
 
