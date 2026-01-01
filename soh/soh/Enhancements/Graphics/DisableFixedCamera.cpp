@@ -171,10 +171,12 @@ void RegisterDisableFixedCamera() {
                 sSensitiveDebugPrinted = true;
             }
             if (sAppliedForSensitive) {
+                bool isLockOnMode = (camera->mode == CAM_MODE_TARGET) || (camera->mode == CAM_MODE_FOLLOWTARGET) ||
+                                    (camera->mode == CAM_MODE_BATTLE);
                 if (camera->setting != CAM_SET_NORMAL0) {
                     Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
                 }
-                if (camera->mode != CAM_MODE_NORMAL) {
+                if (!isLockOnMode && camera->mode != CAM_MODE_NORMAL) {
                     Camera_ChangeMode(camera, CAM_MODE_NORMAL);
                 }
                 camera->nextCamDataIdx = -1;
