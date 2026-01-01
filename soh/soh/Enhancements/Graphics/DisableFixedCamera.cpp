@@ -21,6 +21,8 @@ Vec3s* Camera_GetCamBGData(Camera* camera);
 static bool sForceNormalCamera = false;
 static bool sAppliedForSensitive = false;
 static bool sSensitiveDebugPrinted = false;
+static bool sEnableSensitiveUpdate = false;
+static bool sEnableNonSensitiveUpdate = false;
 
 static const std::set<SceneID> sPrerenderedScenes = {
     SCENE_MARKET_ENTRANCE_DAY,
@@ -59,6 +61,7 @@ static bool IsPrerenderedScene(int16_t sceneNum) {
     return sPrerenderedScenes.contains(static_cast<SceneID>(sceneNum));
 }
 
+// These are handled separately as they force the camera to reset for some reason
 static bool IsSensitiveScene(int16_t sceneNum) {
     switch (sceneNum) {
         case SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY:
@@ -105,8 +108,70 @@ static void EnsureSensitiveSceneCamData(PlayState* play, Camera* camera) {
     }
 }
 
+static void UpdateSceneHooks() {
+    COND_HOOK(OnPlayerUpdate, CVAR_VALUE && sEnableSensitiveUpdate, []() {
+        if (!sForceNormalCamera || gPlayState == NULL) {
+            return;
+        }
+
+        Camera* camera = GET_ACTIVE_CAM(gPlayState);
+        if (camera == NULL) {
+            return;
+        }
+
+        if (!IsSensitiveScene(gPlayState->sceneNum)) {
+            return;
+        }
+
+        if (!sSensitiveDebugPrinted) {
+            SPDLOG_INFO(
+                "[DisableFixedCamera] scene={} frame={} setting={} mode={} camIdx={} unk14A={:04X} unk14C={:04X} anim={}",
+                gPlayState->sceneNum, gPlayState->state.frames, camera->setting, camera->mode, camera->camDataIdx,
+                camera->unk_14A, camera->unk_14C, camera->animState);
+            sSensitiveDebugPrinted = true;
+        }
+        if (sAppliedForSensitive) {
+            bool isLockOnMode = (camera->mode == CAM_MODE_TARGET) || (camera->mode == CAM_MODE_FOLLOWTARGET) ||
+                                (camera->mode == CAM_MODE_BATTLE);
+            if (camera->setting != CAM_SET_NORMAL0) {
+                Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+            }
+            if (!isLockOnMode && camera->mode != CAM_MODE_NORMAL) {
+                Camera_ChangeMode(camera, CAM_MODE_NORMAL);
+            }
+            camera->nextCamDataIdx = -1;
+            camera->unk_14C &= ~(0x1 | 0x4);
+            return;
+        }
+
+        Player* player = GET_PLAYER(gPlayState);
+        if (player == NULL) {
+            return;
+        }
+
+        if (camera->camDataIdx < 0 || Camera_GetCamBGData(camera) == NULL) {
+            return;
+        }
+
+        Camera_ResetAnim(camera);
+        if (camera->setting != CAM_SET_NORMAL0) {
+            Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+        }
+
+        Camera_ChangeMode(camera, CAM_MODE_NORMAL);
+        Camera_InitPlayerSettings(camera, player);
+        camera->nextCamDataIdx = -1;
+        camera->unk_14C &= ~(0x1 | 0x4);
+        gPlayState->unk_1242B = 0;
+        sAppliedForSensitive = true;
+    });
+}
+
 void RegisterDisableFixedCamera() {
     sForceNormalCamera = false;
+    sEnableSensitiveUpdate = false;
+    sEnableNonSensitiveUpdate = false;
+    UpdateSceneHooks();
 
     if (!CVarGetInteger(CVAR_ENHANCEMENT("3DSceneRender"), 0)) {
         if (CVAR_VALUE) {
@@ -119,6 +184,9 @@ void RegisterDisableFixedCamera() {
         sForceNormalCamera = IsPrerenderedScene(sceneNum);
         sAppliedForSensitive = false;
         sSensitiveDebugPrinted = false;
+        sEnableSensitiveUpdate = sForceNormalCamera && IsSensitiveScene(sceneNum);
+        sEnableNonSensitiveUpdate = sForceNormalCamera && !IsSensitiveScene(sceneNum);
+        UpdateSceneHooks();
         if (sForceNormalCamera && gPlayState != NULL) {
             if (!IsSensitiveScene(sceneNum)) {
                 gPlayState->unk_1242B = 0;
@@ -137,6 +205,19 @@ void RegisterDisableFixedCamera() {
         }
 
         EnsureSensitiveSceneCamData(gPlayState, camera);
+        if (!sEnableNonSensitiveUpdate || IsSensitiveScene(gPlayState->sceneNum)) {
+            return;
+        }
+
+        gPlayState->unk_1242B = 0;
+        if (camera->setting != CAM_SET_NORMAL0) {
+            Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+        }
+
+        camera->camDataIdx = -1;
+        camera->nextCamDataIdx = -1;
+        camera->prevCamDataIdx = -1;
+        camera->unk_14A |= 0x40;
     });
 
     COND_HOOK(OnActorInit, CVAR_VALUE, [](void* actorPtr) {
@@ -152,70 +233,10 @@ void RegisterDisableFixedCamera() {
         actor->params = (actor->params & 0xFF00) | 0x00FF;
     });
 
-    COND_HOOK(OnPlayerUpdate, CVAR_VALUE, []() {
-        if (!sForceNormalCamera || gPlayState == NULL) {
-            return;
-        }
-
-        Camera* camera = GET_ACTIVE_CAM(gPlayState);
-        if (camera == NULL) {
-            return;
-        }
-
-        if (IsSensitiveScene(gPlayState->sceneNum)) {
-            if (!sSensitiveDebugPrinted) {
-                SPDLOG_INFO(
-                    "[DisableFixedCamera] scene={} frame={} setting={} mode={} camIdx={} unk14A={:04X} unk14C={:04X} anim={}",
-                    gPlayState->sceneNum, gPlayState->state.frames, camera->setting, camera->mode, camera->camDataIdx,
-                    camera->unk_14A, camera->unk_14C, camera->animState);
-                sSensitiveDebugPrinted = true;
-            }
-            if (sAppliedForSensitive) {
-                bool isLockOnMode = (camera->mode == CAM_MODE_TARGET) || (camera->mode == CAM_MODE_FOLLOWTARGET) ||
-                                    (camera->mode == CAM_MODE_BATTLE);
-                if (camera->setting != CAM_SET_NORMAL0) {
-                    Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
-                }
-                if (!isLockOnMode && camera->mode != CAM_MODE_NORMAL) {
-                    Camera_ChangeMode(camera, CAM_MODE_NORMAL);
-                }
-                camera->nextCamDataIdx = -1;
-                camera->unk_14C &= ~(0x1 | 0x4);
-                return;
-            }
-
-            Player* player = GET_PLAYER(gPlayState);
-            if (player == NULL) {
-                return;
-            }
-
-            if (camera->camDataIdx < 0 || Camera_GetCamBGData(camera) == NULL) {
-                return;
-            }
-
-            Camera_ResetAnim(camera);
-            if (camera->setting != CAM_SET_NORMAL0) {
-                Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
-            }
-
-            Camera_ChangeMode(camera, CAM_MODE_NORMAL);
-            Camera_InitPlayerSettings(camera, player);
-            camera->nextCamDataIdx = -1;
-            camera->unk_14C &= ~(0x1 | 0x4);
-            gPlayState->unk_1242B = 0;
-            sAppliedForSensitive = true;
-            return;
-        }
-
-        gPlayState->unk_1242B = 0;
-        if (camera->setting != CAM_SET_NORMAL0) {
-            Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
-        }
-
-        camera->camDataIdx = -1;
-        camera->nextCamDataIdx = -1;
-        camera->prevCamDataIdx = -1;
-        camera->unk_14A |= 0x40;
+    COND_HOOK(OnPlayDestroy, true, []() {
+        sEnableSensitiveUpdate = false;
+        sEnableNonSensitiveUpdate = false;
+        UpdateSceneHooks();
     });
 }
 
