@@ -1,5 +1,6 @@
 #include <libultraship/bridge.h>
 #include <set>
+#include <spdlog/spdlog.h>
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
@@ -11,12 +12,15 @@ extern "C" {
 #include "variables.h"
 #include "z64.h"
 extern PlayState* gPlayState;
+Vec3s* Camera_GetCamBGData(Camera* camera);
 }
 
 #define CVAR_NAME CVAR_ENHANCEMENT("DisableFixedCamera")
 #define CVAR_VALUE CVarGetInteger(CVAR_NAME, 0)
 
 static bool sForceNormalCamera = false;
+static bool sAppliedForSensitive = false;
+static bool sSensitiveDebugPrinted = false;
 
 static const std::set<SceneID> sPrerenderedScenes = {
     SCENE_MARKET_ENTRANCE_DAY,
@@ -55,6 +59,52 @@ static bool IsPrerenderedScene(int16_t sceneNum) {
     return sPrerenderedScenes.contains(static_cast<SceneID>(sceneNum));
 }
 
+static bool IsSensitiveScene(int16_t sceneNum) {
+    switch (sceneNum) {
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS:
+        case SCENE_BACK_ALLEY_DAY:
+        case SCENE_BACK_ALLEY_NIGHT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool FindFirstValidCamDataIdx(PlayState* play, s16* outIdx) {
+    CollisionHeader* colHeader = BgCheck_GetCollisionHeader(&play->colCtx, BGCHECK_SCENE);
+    if (colHeader == NULL || colHeader->cameraDataListLen == 0) {
+        return false;
+    }
+
+    for (s16 i = 0; i < (s16)colHeader->cameraDataListLen; i++) {
+        if (func_80041C10(&play->colCtx, i, BGCHECK_SCENE) != NULL) {
+            *outIdx = i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void EnsureSensitiveSceneCamData(PlayState* play, Camera* camera) {
+    if (!IsSensitiveScene(play->sceneNum)) {
+        return;
+    }
+
+    if (camera->camDataIdx >= 0 && func_80041C10(&play->colCtx, camera->camDataIdx, BGCHECK_SCENE) != NULL) {
+        return;
+    }
+
+    s16 camDataIdx = -1;
+    if (FindFirstValidCamDataIdx(play, &camDataIdx)) {
+        camera->camDataIdx = camDataIdx;
+        camera->prevCamDataIdx = camDataIdx;
+        camera->nextCamDataIdx = camDataIdx;
+    }
+}
+
 void RegisterDisableFixedCamera() {
     sForceNormalCamera = false;
 
@@ -67,14 +117,35 @@ void RegisterDisableFixedCamera() {
 
     COND_HOOK(AfterSceneCommands, CVAR_VALUE, [](int16_t sceneNum) {
         sForceNormalCamera = IsPrerenderedScene(sceneNum);
+        sAppliedForSensitive = false;
+        sSensitiveDebugPrinted = false;
         if (sForceNormalCamera && gPlayState != NULL) {
-            gPlayState->unk_1242B = 0;
+            if (!IsSensitiveScene(sceneNum)) {
+                gPlayState->unk_1242B = 0;
+            }
         }
+    });
+
+    COND_HOOK(OnPlayDrawBegin, CVAR_VALUE, []() {
+        if (!sForceNormalCamera || gPlayState == NULL) {
+            return;
+        }
+
+        Camera* camera = GET_ACTIVE_CAM(gPlayState);
+        if (camera == NULL) {
+            return;
+        }
+
+        EnsureSensitiveSceneCamData(gPlayState, camera);
     });
 
     COND_HOOK(OnActorInit, CVAR_VALUE, [](void* actorPtr) {
         Actor* actor = static_cast<Actor*>(actorPtr);
         if (!sForceNormalCamera || actor->id != ACTOR_PLAYER) {
+            return;
+        }
+
+        if (gPlayState != NULL && IsSensitiveScene(gPlayState->sceneNum)) {
             return;
         }
 
@@ -88,6 +159,49 @@ void RegisterDisableFixedCamera() {
 
         Camera* camera = GET_ACTIVE_CAM(gPlayState);
         if (camera == NULL) {
+            return;
+        }
+
+        if (IsSensitiveScene(gPlayState->sceneNum)) {
+            if (!sSensitiveDebugPrinted) {
+                SPDLOG_INFO(
+                    "[DisableFixedCamera] scene={} frame={} setting={} mode={} camIdx={} unk14A={:04X} unk14C={:04X} anim={}",
+                    gPlayState->sceneNum, gPlayState->state.frames, camera->setting, camera->mode, camera->camDataIdx,
+                    camera->unk_14A, camera->unk_14C, camera->animState);
+                sSensitiveDebugPrinted = true;
+            }
+            if (sAppliedForSensitive) {
+                if (camera->setting != CAM_SET_NORMAL0) {
+                    Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+                }
+                if (camera->mode != CAM_MODE_NORMAL) {
+                    Camera_ChangeMode(camera, CAM_MODE_NORMAL);
+                }
+                camera->nextCamDataIdx = -1;
+                camera->unk_14C &= ~(0x1 | 0x4);
+                return;
+            }
+
+            Player* player = GET_PLAYER(gPlayState);
+            if (player == NULL) {
+                return;
+            }
+
+            if (camera->camDataIdx < 0 || Camera_GetCamBGData(camera) == NULL) {
+                return;
+            }
+
+            Camera_ResetAnim(camera);
+            if (camera->setting != CAM_SET_NORMAL0) {
+                Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+            }
+
+            Camera_ChangeMode(camera, CAM_MODE_NORMAL);
+            Camera_InitPlayerSettings(camera, player);
+            camera->nextCamDataIdx = -1;
+            camera->unk_14C &= ~(0x1 | 0x4);
+            gPlayState->unk_1242B = 0;
+            sAppliedForSensitive = true;
             return;
         }
 
