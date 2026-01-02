@@ -109,13 +109,28 @@ static void EnsureSensitiveSceneCamData(PlayState* play, Camera* camera) {
     }
 }
 
-static bool IsOcarinaActive(PlayState* play) {
+static bool IsOcarinaPlaying(PlayState* play) {
     if (play == NULL) {
         return false;
     }
 
     Player* player = GET_PLAYER(play);
     return player != NULL && (player->stateFlags2 & PLAYER_STATE2_OCARINA_PLAYING);
+}
+
+static bool IsOcarinaStartTrigger(PlayState* play) {
+    if (play == NULL) {
+        return false;
+    }
+
+    Player* player = GET_PLAYER(play);
+    if (player == NULL) {
+        return false;
+    }
+
+    return player->itemAction == PLAYER_IA_OCARINA_FAIRY || player->itemAction == PLAYER_IA_OCARINA_OF_TIME ||
+           player->heldItemAction == PLAYER_IA_OCARINA_FAIRY || player->heldItemAction == PLAYER_IA_OCARINA_OF_TIME ||
+           (player->stateFlags3 & PLAYER_STATE3_FORCE_PULL_OCARINA);
 }
 
 static void ApplyOcarinaCamOnce(Camera* camera, Player* player) {
@@ -166,8 +181,14 @@ static void UpdateSceneHooks() {
                 camera->unk_14A, camera->unk_14C, camera->animState);
             sSensitiveDebugPrinted = true;
         }
-        bool ocarinaActive = IsOcarinaActive(gPlayState);
-        if (ocarinaActive) {
+        bool ocarinaPlaying = IsOcarinaPlaying(gPlayState);
+        bool ocarinaStart = !ocarinaPlaying && IsOcarinaStartTrigger(gPlayState);
+        if (ocarinaPlaying) {
+            ApplyOcarinaCamOnce(camera, GET_PLAYER(gPlayState));
+            sWasOcarinaActive = true;
+            return;
+        }
+        if (ocarinaStart) {
             if (!sWasOcarinaActive) {
                 ApplyOcarinaCamOnce(camera, GET_PLAYER(gPlayState));
             }
@@ -177,6 +198,7 @@ static void UpdateSceneHooks() {
         if (sWasOcarinaActive) {
             sWasOcarinaActive = false;
             ForceNormalCam(camera, gPlayState);
+            return;
         }
         if (sAppliedForSensitive) {
             bool isLockOnMode = (camera->mode == CAM_MODE_TARGET) || (camera->mode == CAM_MODE_FOLLOWTARGET) ||
@@ -257,8 +279,14 @@ void RegisterDisableFixedCamera() {
         if (!sEnableNonSensitiveUpdate || IsSensitiveScene(gPlayState->sceneNum)) {
             return;
         }
-        bool ocarinaActive = IsOcarinaActive(gPlayState);
-        if (ocarinaActive) {
+        bool ocarinaPlaying = IsOcarinaPlaying(gPlayState);
+        bool ocarinaStart = !ocarinaPlaying && IsOcarinaStartTrigger(gPlayState);
+        if (ocarinaPlaying) {
+            ApplyOcarinaCamOnce(camera, GET_PLAYER(gPlayState));
+            sWasOcarinaActive = true;
+            return;
+        }
+        if (ocarinaStart) {
             if (!sWasOcarinaActive) {
                 ApplyOcarinaCamOnce(camera, GET_PLAYER(gPlayState));
             }
@@ -268,6 +296,7 @@ void RegisterDisableFixedCamera() {
         if (sWasOcarinaActive) {
             sWasOcarinaActive = false;
             ForceNormalCam(camera, gPlayState);
+            return;
         }
 
         gPlayState->unk_1242B = 0;
