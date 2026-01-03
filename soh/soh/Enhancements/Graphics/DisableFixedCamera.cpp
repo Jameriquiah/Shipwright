@@ -58,9 +58,7 @@ static std::unordered_map<const CollisionHeader*, CamDataBackup> sCamDataBackups
 
 // Helper to check if a camera type is a fixed camera
 static bool IsFixedCameraType(s16 type) {
-    return type == CAM_SET_PREREND_FIXED ||
-           type == CAM_SET_PREREND_PIVOT ||
-           type == CAM_SET_PIVOT_FROM_SIDE;
+    return type == CAM_SET_PREREND_FIXED || type == CAM_SET_PREREND_PIVOT || type == CAM_SET_PIVOT_FROM_SIDE;
 }
 
 static void RegisterDisableFixedCamera() {
