@@ -901,6 +901,16 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("BowReticle"))
         .Options(CheckboxOptions().Tooltip("Aiming with a Bow or Slingshot will display a reticle as with the Hookshot "
                                            "when the projectile is ready to fire."));
+    AddWidget(path, "Third Person Aiming", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ThirdPersonAiming"))
+        .Callback([](WidgetInfo& info) {
+            if (CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAiming"), 0)) {
+                CVarSetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), 0);
+                CVarSetInteger(CVAR_ENHANCEMENT("BoomerangReticle"), 0);
+            }
+        })
+        .Options(CheckboxOptions().Tooltip(
+            "TEST"));
     AddWidget(path, "Arrow Cycle", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("BowArrowCycle"))
         .Options(CheckboxOptions().Tooltip(
@@ -922,6 +932,10 @@ void SohMenu::AddMenuEnhancements() {
                                            "it's in the air."));
     AddWidget(path, "Aim Boomerang in First-Person Mode", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("BoomerangFirstPerson"))
+        .PreFunc([](WidgetInfo& info) {
+            info.options->disabled = CVarGetInteger(CVAR_ENHANCEMENT("ThirdPersonAiming"), 0);
+            info.options->disabledTooltip = "Disabled while Third-Person Aiming is enabled.";
+        })
         .Callback([](WidgetInfo& info) {
             if (!CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), 0)) {
                 CVarSetInteger(CVAR_ENHANCEMENT("BoomerangReticle"), 0);
