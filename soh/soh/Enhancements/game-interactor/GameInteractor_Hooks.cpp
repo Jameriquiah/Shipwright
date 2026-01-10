@@ -102,6 +102,10 @@ void GameInteractor_ExecuteOnPlayerUpdate() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerUpdate>();
 }
 
+void GameInteractor_ExecuteOnPlayerAimCameraMode(Player* player, s16* camMode) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerAimCameraMode>(player, camMode);
+}
+
 void GameInteractor_ExecuteOnSetDoAction(uint16_t action) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSetDoAction>(action);
 }
