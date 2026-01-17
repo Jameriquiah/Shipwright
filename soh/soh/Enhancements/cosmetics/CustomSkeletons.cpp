@@ -1,4 +1,5 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/BattleDamageModels.h"
 #include "soh/resource/type/Skeleton.h"
 #include "soh/ShipInit.hpp"
 
@@ -14,6 +15,7 @@ static void UpdateCustomSkeleton() {
     }
 
     SOH::SkeletonPatcher::UpdateCustomSkeletons();
+    BattleDamageModels_ApplyToLocalPlayer();
 }
 
 static void RegisterCustomSkeletons() {
