@@ -1,4 +1,5 @@
 #include "Anchor.h"
+#include "soh/Network/Anchor/AnchorModRegistry.h"
 #include "soh/Enhancements/nametag.h"
 #include "soh/frame_interpolation.h"
 
@@ -88,6 +89,9 @@ void DummyPlayer_Init(Actor* actor, PlayState* play) {
     if (!isGlobalRoom) {
         NameTag_RegisterForActorWithOptions(actor, client.name.c_str(), {});
     }
+
+    AnchorModRegistry::ApplyModelToPlayer(client.modelId, client.linkAge, player);
+    client.appliedModelId = client.modelId;
 }
 
 void Math_Vec3s_Copy(Vec3s* dest, Vec3s* src) {
@@ -169,6 +173,11 @@ void DummyPlayer_Update(Actor* actor, PlayState* play) {
         gSaveContext.equips.buttonItems[0] = originalButtonItem0;
     }
 
+    if (client.modelId != client.appliedModelId) {
+        AnchorModRegistry::ApplyModelToPlayer(client.modelId, client.linkAge, player);
+        client.appliedModelId = client.modelId;
+    }
+
     if (Anchor::Instance->roomState.pvpMode == 0 ||
         (Anchor::Instance->roomState.pvpMode == 1 &&
          client.teamId == CVarGetString(CVAR_REMOTE_ANCHOR("TeamId"), "default"))) {
@@ -228,6 +237,16 @@ void DummyPlayer_Draw(Actor* actor, PlayState* play) {
     AnchorClient& client = Anchor::Instance->clients[clientId];
 
     if (client.sceneNum != gPlayState->sceneNum || !client.online || !client.isSaveLoaded) {
+        return;
+    }
+
+    if (AnchorModRegistry::HasCustomModel(client.modelId, client.linkAge, player->skelAnime.limbCount)) {
+        OPEN_DISPS(play->state.gfxCtx);
+
+        Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        SkelAnime_DrawSkeletonOpa(play, &player->skelAnime, nullptr, nullptr, nullptr);
+
+        CLOSE_DISPS(play->state.gfxCtx);
         return;
     }
 
